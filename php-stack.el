@@ -155,7 +155,8 @@
         (let ((line (stack-info-line current-stack-info)))
           (when line
             (goto-line line)
-            (highlight-this-line-as-current-source-line)))))
+            (highlight-this-line-as-current-source-line)
+            (recenter)))))
     (highlight-php-stack-info current-stack-info)))
 
 (defun start-php-stack-browse ()
