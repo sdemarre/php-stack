@@ -2,6 +2,7 @@
 (setq php-shell-buffer nil)
 (setq php-stack-highlight-info nil)
 (setq saved-buffer-before-php-shell nil)
+(setq php-stack-current-source-line-buffer nil)
 (defun current-line ()
   (buffer-substring-no-properties (point-at-bol) (point-at-eol)))
 
@@ -105,16 +106,32 @@
         (visit-current-php-stack-file))
     (message "at bottom")))
 
+
+(defmacro my-save-excursion (&rest body)
+  (let ((saved-buffer (gensym))
+        (saved-point (gensym)))
+    `(let ((,saved-buffer (current-buffer))
+           (,saved-point (point)))
+       ,@body
+       (switch-to-buffer ,saved-buffer)
+       (goto-char ,saved-point))))
+
+(defun highlight-this-line-as-current-source-line ()
+  (when php-stack-current-source-line-buffer
+    (my-save-excursion
+      (switch-to-buffer php-stack-current-source-line-buffer)
+      (ov-clear 'php-stack-current-source)
+      (setf php-stack-current-source-line-buffer nil)))
+  (ov-set (ov-line) 'face 'php-stack-current-source-line-highlight-face 'php-stack-current-source t)
+  (setf php-stack-current-source-line-buffer  (current-buffer)))
+
 (defun highlight-php-stack-info (stack-info)
-  (let ((saved-buffer (current-buffer))
-        (saved-point (point)))
+  (my-save-excursion
     (switch-to-buffer (stack-info-source-buffer stack-info))
     (select-window (get-buffer-window (current-buffer)))
     (ov-clear 'php-stack-highlight)
     (goto-char (stack-info-source-buffer-start-pos stack-info))
-    (ov-set (ov-line) 'face 'php-stack-line-highlight-face 'php-stack-highlight t)
-    (switch-to-buffer saved-buffer)
-    (goto-char saved-point)))
+    (ov-set (ov-line) 'face 'php-stack-line-highlight-face 'php-stack-highlight t)))
 
 (defun current-frame-displays-file-p (file)
   (let ((window-infos   ;; for all windows of the frame: (window buffer buffer-file-name)
@@ -137,7 +154,8 @@
             (find-file file)))
         (let ((line (stack-info-line current-stack-info)))
           (when line
-            (goto-line line)))))
+            (goto-line line)
+            (highlight-this-line-as-current-source-line)))))
     (highlight-php-stack-info current-stack-info)))
 
 (defun start-php-stack-browse ()
@@ -271,5 +289,8 @@
        :weight bold))
   "Face for php stack line in source buffer highlight.")
 
-
-
+(defface php-stack-current-source-line-highlight-face
+  '((t :foreground "black"
+       :background "orange"
+       :weight bold))
+  "Face for php stack current source line highlight.")
