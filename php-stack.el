@@ -166,6 +166,7 @@
 
 (defun trace-and-start-php-stack-browse ()
   (interactive)
+  (jump-to-php-shell)
   (goto-char (point-max))
   (comint-send-string (get-buffer-process (current-buffer)) "trace\n\n")
   (let (found
