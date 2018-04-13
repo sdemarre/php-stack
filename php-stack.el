@@ -1,6 +1,7 @@
 (setq php-stack-data nil)
 (setq php-shell-buffer nil)
 (setq php-stack-highlight-info nil)
+(setq saved-buffer-before-php-shell nil)
 (defun current-line ()
   (buffer-substring-no-properties (point-at-bol) (point-at-eol)))
 
@@ -115,13 +116,25 @@
     (switch-to-buffer saved-buffer)
     (goto-char saved-point)))
 
+(defun current-frame-displays-file-p (file)
+  (let ((window-infos   ;; for all windows of the frame: (window buffer buffer-file-name)
+         (mapcar #'(lambda (window) (let ((buffer (window-buffer window)))
+                                      (list window buffer (buffer-file-name buffer))))
+                 (window-list))))
+    (remove-if-not #'(lambda (window-info) (string= (third window-info) file)) window-infos)))
+(defun window-that-displays-file-in-current-frame (file)
+  (let ((windows-with-file (current-frame-displays-file-p file)))
+    (when windows-with-file
+      (caar windows-with-file))))
 (defun visit-current-php-stack-file ()
   (let ((current-stack-info (aref (php-stack-file-infos) (php-stack-index))))
     (let ((file (stack-info-file current-stack-info)))
       (when file
-        (if (eq (current-buffer) (stack-info-source-buffer current-stack-info))
-            (find-file-other-window file)
-          (find-file file))
+        (if (current-frame-displays-file-p file)
+            (select-window (window-that-displays-file-in-current-frame file))
+          (if (eq (current-buffer) (stack-info-source-buffer current-stack-info))
+              (find-file-other-window file)
+            (find-file file)))
         (let ((line (stack-info-line current-stack-info)))
           (when line
             (goto-line line)))))
@@ -151,6 +164,8 @@
 
 (defun jump-to-php-shell ()
   (interactive)
+  (unless (in-php-shell-buffer-p)
+    (setf saved-buffer-before-php-shell (current-buffer)))
   (let ((php-shell-buffer (cond ((and php-stack-data
                                       (php-stack-file-infos)
                                       (> (length (cdr php-stack-data)) 0))
@@ -163,6 +178,11 @@
           (comint-goto-process-mark))
       (message "Sorry, I don't know which php-shell-buffer contains the php shell..."))))
 
+(defun restore-saved-buffer-before-php-shell ()
+  (interactive)
+  (when saved-buffer-before-php-shell
+    (switch-to-buffer-other-window saved-buffer-before-php-shell)))
+
 (defun in-php-buffer-p ()
   (and (buffer-file-name)
        (string= (file-name-extension (buffer-file-name)) "php")))
@@ -170,6 +190,9 @@
 (defun maybe-save-this-php-buffer ()
   (when (in-php-buffer-p)
     (save-buffer)))
+
+(defun in-php-shell-buffer-p ()
+  (eq (current-buffer) php-shell-buffer))
 
 (defun maybe-interrupt-current-psysh-session ()
   (let (in-psysh-p)
@@ -206,8 +229,8 @@
           (let ((maybe-filter (if maybe-function-name
                                   (concatenate 'string " --filter " maybe-function-name)
                                 "")))
-            (comint-send-string (get-buffer-process (current-buffer))
-                                (concatenate 'string "vendor/bin/phpunit --no-coverage tests/Feature/" test-filename maybe-filter "\n"))))
+            (insert (concatenate 'string "vendor/bin/phpunit --no-coverage tests/Feature/" test-filename maybe-filter))
+            (comint-send-input)))
       (message "This doesn't look like a php test"))))
 
 (defun get-current-php-function-name ()
@@ -220,6 +243,19 @@
             (string-match function-line-re line)
             (match-string 7 line)))))))
 
+(defun run-this-phpunit-test-or-return-to-test-buffer (prefix)
+  (interactive "p")
+  (if (in-php-shell-buffer-p)
+      (restore-saved-buffer-before-php-shell)
+    (run-this-phpunit-test prefix)))
+
+(defun window-for-buffer-in-current-frame (buffer)
+  (let* ((current-frame (window-frame (get-buffer-window (current-buffer))))
+         (buffer-windows (get-buffer-window-list buffer))
+         (windows-for-buffer-in-current-frame
+          (remove-if-not #'(lambda (window) (eq current-frame (window-frame window))) buffer-windows)))
+    (car windows-for-buffer-in-current-frame)))
+
 (global-set-key (kbd "<C-f10>") 'start-php-stack-browse)
 (global-set-key (kbd "<C-f11>") 'highlight-previous-php-stack-entry)
 (global-set-key (kbd "<C-f12>") 'highlight-next-php-stack-entry)
@@ -227,7 +263,8 @@
 (global-set-key (kbd "<C-f8>") 'trace-and-start-php-stack-browse)
 (global-set-key (kbd "<C-f7>") 'jump-to-php-shell)
 (global-set-key (kbd "<C-f6>") 'rerun-last-phpunit-test)
-(global-set-key (kbd "<C-f5>") 'run-this-phpunit-test)
+(global-set-key (kbd "<C-f5>") 'run-this-phpunit-test-or-return-to-test-buffer)
+
 (defface php-stack-line-highlight-face
   '((t :foreground "black"
        :background "aquamarine"
