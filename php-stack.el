@@ -119,26 +119,35 @@
 (defun highlight-this-line-as-current-source-line ()
   (when php-stack-current-source-line-buffer
     (my-save-excursion
-      (switch-to-buffer php-stack-current-source-line-buffer)
-      (ov-clear 'php-stack-current-source)
-      (setf php-stack-current-source-line-buffer nil)))
+     (switch-to-buffer php-stack-current-source-line-buffer)
+     (ov-clear 'php-stack-current-source)
+     (setf php-stack-current-source-line-buffer nil)))
   (ov-set (ov-line) 'face 'php-stack-current-source-line-highlight-face 'php-stack-current-source t)
   (setf php-stack-current-source-line-buffer  (current-buffer)))
 
+(defun window-infos ()
+  ;; for all windows of the frame: (window buffer buffer-file-name)
+  (mapcar #'(lambda (window) (let ((buffer (window-buffer window)))
+                               (list window buffer (buffer-file-name buffer))))
+          (window-list)))
+
+(defun window-that-displays-buffer-in-current-frame (buffer)
+  (let ((window-with-buffer (find-if #'(lambda (window-info) (eq buffer (second window-info))) (window-infos))))
+    (when window-with-buffer
+      (setq the-global-window-buffer window-with-buffer)
+      (car window-with-buffer))))
+
 (defun highlight-php-stack-info (stack-info)
-  (my-save-excursion
-    (switch-to-buffer (stack-info-source-buffer stack-info))
-    (select-window (get-buffer-window (current-buffer)))
+  (let ((stack-info-window (window-that-displays-buffer-in-current-frame (stack-info-source-buffer stack-info))))
+    (if stack-info-window
+        (select-window stack-info-window)
+      (switch-to-buffer-other-window (stack-info-source-buffer stack-info)))
     (ov-clear 'php-stack-highlight)
     (goto-char (stack-info-source-buffer-start-pos stack-info))
-    (ov-set (ov-line) 'face 'php-stack-line-highlight-face 'php-stack-highlight t)))
-
+    (ov-set (ov-line) 'face 'php-stack-line-highlight-face 'php-stack-highlight t)
+    (recenter)))
 (defun current-frame-displays-file-p (file)
-  (let ((window-infos   ;; for all windows of the frame: (window buffer buffer-file-name)
-         (mapcar #'(lambda (window) (let ((buffer (window-buffer window)))
-                                      (list window buffer (buffer-file-name buffer))))
-                 (window-list))))
-    (remove-if-not #'(lambda (window-info) (string= (third window-info) file)) window-infos)))
+  (remove-if-not #'(lambda (window-info) (string= (third window-info) file)) (window-infos)))
 (defun window-that-displays-file-in-current-frame (file)
   (let ((windows-with-file (current-frame-displays-file-p file)))
     (when windows-with-file
@@ -148,7 +157,8 @@
     (let ((file (stack-info-file current-stack-info)))
       (when file
         (if (current-frame-displays-file-p file)
-            (select-window (window-that-displays-file-in-current-frame file))
+            (let ((the-window (window-that-displays-file-in-current-frame file)))
+              (select-window the-window))
           (if (eq (current-buffer) (stack-info-source-buffer current-stack-info))
               (find-file-other-window file)
             (find-file file)))
@@ -165,11 +175,7 @@
   (get-stack-info-at-point)
   (visit-current-php-stack-file))
 
-(defun trace-and-start-php-stack-browse ()
-  (interactive)
-  (jump-to-php-shell)
-  (goto-char (point-max))
-  (comint-send-string (get-buffer-process (current-buffer)) "trace\n\n")
+(defun wait-until-seeing (yes no)
   (let (found
         (count 0))
     (while (not found)
@@ -179,8 +185,22 @@
       (goto-char (point-at-bol))
       (message (format "waiting:%d" count))
       (incf count)
-      (setf found (and (looking-at ">>> ") (not (looking-at ">>> trace"))))))
-  (find-previous-stack-info-top))
+      ;; (when (looking-at "vagrant@homestead")
+      ;;   (comint-goto-process-mark)
+      ;;   (error "exited..."))
+      (setf found (and (not (looking-at no)) (looking-at yes))))))
+
+(defun trace-and-start-php-stack-browse ()
+  (interactive)
+  (jump-to-php-shell)
+  (cond ((and (has-local-variable "$result") (php-expr-p "!is_null($result->exception)"))
+         (comint-send-string (get-buffer-process (current-buffer)) "$result->exception->getTraceAsString()\n\n")
+         (wait-until-seeing ">>> " ">>> $result->exception->getTraceAsString()")
+         (find-previous-stack-info-top))
+        (t
+         (comint-send-string (get-buffer-process (current-buffer)) "trace\n\n")
+         (wait-until-seeing ">>> " ">>> trace")
+         (find-previous-stack-info-top))))
 
 (defun jump-to-php-shell ()
   (interactive)
@@ -230,7 +250,19 @@
   (comint-clear-buffer)
   (maybe-interrupt-current-psysh-session)
   (let ((last-kbd-macro [?\M-r ?p ?h ?p ?u ?n ?i ?t return return]))
-    (call-last-kbd-macro)))
+    (call-last-kbd-macro))
+  (when nil ;; I wanted to automatically go to the breakpoint, but I figured out I should be using process filters to do this waiting, tbd later
+    (wait-until-seeing "\\(>>> \\)\\|\\(vagrant\\)" "vagrant@.+\\$ vendor/bin")
+    (let ((action (save-excursion
+                    (full-previous-line)
+                    (cond ((looking-at ">>> ")
+                           'psysh)
+                          ((looking-at "vagrant")
+                           'bash)))))
+      (cond ((eq action 'psysh)
+             (find-previous-stack-info-top))
+            ((eq action 'bash)
+             (message "test completed"))))))
 
 (defun in-php-test-buffer-p ()
   (and (in-php-buffer-p)
@@ -276,6 +308,55 @@
           (remove-if-not #'(lambda (window) (eq current-frame (window-frame window))) buffer-windows)))
     (car windows-for-buffer-in-current-frame)))
 
+(defun go-to-next-breakpoint ()
+  (interactive)
+  (jump-to-php-shell)
+  (insert "")
+  (comint-send-input)
+  (wait-until-seeing ">>> " ">>> ")
+  (find-previous-stack-info-top)
+  (jump-to-php-shell))
+
+(defmacro with-invisible-output (&rest body)
+  `(progn
+    (jump-to-php-shell)
+    (let ((previous-prompt-point (point)))
+      (unwind-protect
+          (progn
+            ,@body)
+        (delete-region previous-prompt-point (point))))))
+
+(defun execute-php-command (command)
+  (insert command)
+  (comint-send-input)
+  (wait-until-seeing ">>> " (concatenate 'string ">>> " command))
+  (comint-goto-process-mark))
+
+(defun has-local-variable (variable-name)
+  (with-invisible-output
+   (comint-goto-process-mark)
+   (execute-php-command "ls")
+   (save-excursion
+     (full-previous-line)
+     (full-previous-line)
+     (let ((local-variables (s-split ", " (substring (current-line) 11))))
+       (if (not (null (member variable-name local-variables)))
+           (message "yes!")
+         (message "no:("))))))
+
+(defun php-expr-p (expr)
+  (with-invisible-output
+   (comint-goto-process-mark)
+   (execute-php-command expr)
+   (save-excursion
+     (full-previous-line)
+     (full-previous-line)
+     (looking-at "=> true"))))
+
+(defun php-result-has-exception ()
+  (and (has-local-variable "$result")
+       (php-expr-p "!is_null($result->exception)")))
+
 (global-set-key (kbd "<C-f10>") 'start-php-stack-browse)
 (global-set-key (kbd "<C-f11>") 'highlight-previous-php-stack-entry)
 (global-set-key (kbd "<C-f12>") 'highlight-next-php-stack-entry)
@@ -284,6 +365,8 @@
 (global-set-key (kbd "<C-f7>") 'jump-to-php-shell)
 (global-set-key (kbd "<C-f6>") 'rerun-last-phpunit-test)
 (global-set-key (kbd "<C-f5>") 'run-this-phpunit-test-or-return-to-test-buffer)
+(global-set-key (kbd "<f9>") 'go-to-next-breakpoint)
+
 
 (defface php-stack-line-highlight-face
   '((t :foreground "black"
