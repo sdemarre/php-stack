@@ -3,6 +3,8 @@
 (setq php-stack-highlight-info nil)
 (setq saved-buffer-before-php-shell nil)
 (setq php-stack-current-source-line-buffer nil)
+(setq skip-files-when-walking-stack nil)
+(setq files-to-skip-when-walking-stack '("vendor/.*"))
 (defun current-line ()
   (buffer-substring-no-properties (point-at-bol) (point-at-eol)))
 
@@ -87,25 +89,34 @@
   (full-next-line)
   (start-php-stack-browse))
 
-(defun highlight-next-php-stack-entry ()
-  (interactive)
-  (if (and php-stack-data
-             (< (php-stack-index)
-                (1- (length (php-stack-file-infos)))))
-    (progn
-      (incf (php-stack-index))
-      (visit-current-php-stack-file))
-    (message "at top")))
+(defun should-display-current-stack-entry ()
+  (let ((stack-info-file (stack-info-file (current-stack-info))))
+    (and (stringp stack-info-file)
+         (or (not skip-files-when-walking-stack)
+             (not (some #'(lambda (skip-pattern) (string-match skip-pattern stack-info-file)) files-to-skip-when-walking-stack))))))
 
-(defun highlight-previous-php-stack-entry ()
-  (interactive)
-  (if (and php-stack-data
-           (> (car php-stack-data) 0))
-      (progn
-        (decf (car php-stack-data))
-        (visit-current-php-stack-file))
-    (message "at bottom")))
-
+(defun move-to-next-stack-entry (move limit toggle-filter)
+  (when toggle-filter
+    (setq skip-files-when-walking-stack (not skip-files-when-walking-stack)))
+  (let (found-stack-entry-to-display)
+    (while (and php-stack-data
+                (funcall limit)
+                (not found-stack-entry-to-display))
+      (funcall move)
+      (setf found-stack-entry-to-display (should-display-current-stack-entry)))
+    (if found-stack-entry-to-display
+        (visit-current-php-stack-file)
+      (message "at bottom"))))
+(defun highlight-previous-php-stack-entry (prefix)
+  (interactive "p")
+  (move-to-next-stack-entry #'(lambda () (decf (php-stack-index)))
+                            #'(lambda () (> (php-stack-index) 0))
+                            (= prefix 4)))
+(defun highlight-next-php-stack-entry (prefix)
+  (interactive "p")
+  (move-to-next-stack-entry #'(lambda () (incf (php-stack-index)))
+                            #'(lambda () (< (php-stack-index) (1- (length (php-stack-file-infos)))))
+                            (= prefix 4)))
 
 (defmacro my-save-excursion (&rest body)
   (let ((saved-buffer (gensym))
@@ -152,8 +163,10 @@
   (let ((windows-with-file (current-frame-displays-file-p file)))
     (when windows-with-file
       (caar windows-with-file))))
+(defun current-stack-info ()
+  (aref (php-stack-file-infos) (php-stack-index)))
 (defun visit-current-php-stack-file ()
-  (let ((current-stack-info (aref (php-stack-file-infos) (php-stack-index))))
+  (let ((current-stack-info (current-stack-info)))
     (let ((file (stack-info-file current-stack-info)))
       (when file
         (if (current-frame-displays-file-p file)
