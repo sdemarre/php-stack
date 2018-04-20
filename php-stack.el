@@ -1,3 +1,4 @@
+(require 'ov)
 (setq php-stack-data nil)
 (setq php-shell-buffer nil)
 (setq php-stack-highlight-info nil)
