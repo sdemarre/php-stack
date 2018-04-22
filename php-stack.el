@@ -106,7 +106,7 @@
       (funcall move)
       (setf found-stack-entry-to-display (should-display-current-stack-entry)))
     (if found-stack-entry-to-display
-        (visit-current-php-stack-file)
+        (visit-current-php-stack-file t)
       (message "at bottom"))))
 (defun highlight-previous-php-stack-entry (prefix)
   (interactive "p")
@@ -166,7 +166,7 @@
       (caar windows-with-file))))
 (defun current-stack-info ()
   (aref (php-stack-file-infos) (php-stack-index)))
-(defun visit-current-php-stack-file ()
+(defun visit-current-php-stack-file (highlight-stack-p)
   (let ((current-stack-info (current-stack-info)))
     (let ((file (stack-info-file current-stack-info)))
       (when file
@@ -181,13 +181,14 @@
             (goto-line line)
             (highlight-this-line-as-current-source-line)
             (recenter)))))
-    (highlight-php-stack-info current-stack-info)))
+    (when highlight-stack-p
+      (highlight-php-stack-info current-stack-info))))
 
 (defun start-php-stack-browse ()
   "start browsing the call stack which is under the cursor"
   (interactive)
   (get-stack-info-at-point)
-  (visit-current-php-stack-file))
+  (visit-current-php-stack-file t))
 
 (defun wait-until-seeing (yes no)
   (let (found
@@ -371,6 +372,10 @@
   (and (has-local-variable "$result")
        (php-expr-p "!is_null($result->exception)")))
 
+(defun go-to-current-breakpoint-buffer ()
+  (interactive)
+  (visit-current-php-stack-file nil))
+
 (global-set-key (kbd "<C-f10>") 'start-php-stack-browse)
 (global-set-key (kbd "<C-f11>") 'highlight-previous-php-stack-entry)
 (global-set-key (kbd "<C-f12>") 'highlight-next-php-stack-entry)
@@ -380,6 +385,7 @@
 (global-set-key (kbd "<C-f6>") 'rerun-last-phpunit-test)
 (global-set-key (kbd "<C-f5>") 'run-this-phpunit-test-or-return-to-test-buffer)
 (global-set-key (kbd "<f9>") 'go-to-next-breakpoint)
+(global-set-key (kbd "<f10>") 'go-to-current-breakpoint-buffer)
 
 
 (defface php-stack-line-highlight-face
