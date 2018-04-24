@@ -377,7 +377,7 @@
   (interactive)
   (visit-current-php-stack-file nil))
 
-(global-set-key (kbd "<C-f10>") 'start-php-stack-browse)
+(global-set-key (kbd "<C-f10>") 'go-to-current-breakpoint-buffer)
 (global-set-key (kbd "<C-f11>") 'highlight-previous-php-stack-entry)
 (global-set-key (kbd "<C-f12>") 'highlight-next-php-stack-entry)
 (global-set-key (kbd "<C-f9>") 'find-previous-stack-info-top)
@@ -386,8 +386,6 @@
 (global-set-key (kbd "<C-f6>") 'rerun-last-phpunit-test)
 (global-set-key (kbd "<C-f5>") 'run-this-phpunit-test-or-return-to-test-buffer)
 (global-set-key (kbd "<f9>") 'go-to-next-breakpoint)
-(global-set-key (kbd "<f10>") 'go-to-current-breakpoint-buffer)
-
 
 (defface php-stack-line-highlight-face
   '((t :foreground "black"
