@@ -129,7 +129,8 @@
        (goto-char ,saved-point))))
 
 (defun highlight-this-line-as-current-source-line ()
-  (when php-stack-current-source-line-buffer
+  (when (and php-stack-current-source-line-buffer
+             (buffer-live-p php-stack-current-source-line-buffer))
     (my-save-excursion
      (switch-to-buffer php-stack-current-source-line-buffer)
      (ov-clear 'php-stack-current-source)
