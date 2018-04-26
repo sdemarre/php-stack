@@ -329,7 +329,7 @@
   (jump-to-php-shell)
   (insert "")
   (comint-send-input)
-  (wait-until-seeing ">>> " ">>> ")
+  (wait-until-seeing "\\(>>> \\)\\|\\(vagrant@homestead\\)" ">>> ")
   (find-previous-stack-info-top)
   (jump-to-php-shell))
 
