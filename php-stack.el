@@ -213,6 +213,14 @@
          (comint-send-string (get-buffer-process (current-buffer)) "$result->exception->getTraceAsString()\n\n")
          (wait-until-seeing ">>> " ">>> $result->exception->getTraceAsString()")
          (find-previous-stack-info-top))
+        ((and (has-local-variable "$result")
+              (php-expr-p "!is_null($result->original) &&
+                           array_has($result->original, 'error') &&
+                           is_array($result->original['error']) &&
+                           count($result->original['error']) > 4"))
+         (comint-send-string (get-buffer-process (current-buffer)) "$result->original['error'][4]->getTraceAsString()\n\n")
+         (wait-until-seeing ">>> " ">>> $result->original")
+         (find-previous-stack-info-top))
         (t
          (comint-send-string (get-buffer-process (current-buffer)) "trace\n\n")
          (wait-until-seeing ">>> " ">>> trace")
