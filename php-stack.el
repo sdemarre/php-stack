@@ -11,7 +11,7 @@
   (setq local-prefix "/home/serge/data/assetManagerSite")
   (setq remote-shell-rx "vagrant"))
 (progn
-  (setq remote-prefix "/root/asset-manager/")
+  (setq remote-prefix "/asset-manager/")
   (setq local-prefix "~/data2/serge/docker/asset-manager-composer/asset-manager/")
   (setq remote-shell-rx "root"))
 (setq remote-prefix-rx (concatenate 'string "^" remote-prefix))
@@ -60,7 +60,11 @@
 (defun remote-to-local (filename)
   (replace-regexp-in-string remote-prefix-rx local-prefix filename))
 (defun stack-info-line-p (line)
-  (or (and (string-match-p remote-prefix-rx line)
+  (message line)
+  (or (and (progn (message "testing string-match-p") t)
+           (progn (message remote-prefix-rx) t)
+           (string-match-p remote-prefix-rx line)
+           (progn (message "matches") t)
            (let ((split-info (split-string line ":")))
              (when (cdr split-info)
                (make-php-stack-info (remote-to-local (car split-info))
@@ -280,6 +284,7 @@
       (goto-char (point-at-bol))
       (setf in-psysh-p (looking-at ">>>")))
     (when in-psysh-p
+      (message "in-pshysh-p!!")
       (comint-send-string (get-buffer-process (current-buffer)) "\n"))))
 
 (defun wait-for-new-psysh-or-bash-prompt (current-prompt)
@@ -446,6 +451,7 @@
 
 (defface php-stack-current-source-line-highlight-face
   '((t :foreground "black"
-       :background "orange"
+       :background "pink"
        :weight bold))
   "Face for php stack current source line highlight.")
+
