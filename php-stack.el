@@ -6,10 +6,6 @@
 (setq php-stack-current-source-line-buffer nil)
 (setq skip-files-when-walking-stack nil)
 (setq files-to-skip-when-walking-stack '("vendor/.*"))
-(progn ;; this was used when we were relying on vagrant laravel, but is no longer needed
-  (setq remote-prefix "/home/vagrant/assetManager/")
-  (setq local-prefix "/home/serge/data/assetManagerSite")
-  (setq remote-shell-rx "vagrant"))
 (progn
   (setq remote-prefix "/asset-manager/")
   (setq local-prefix "~/data2/serge/docker/asset-manager-composer/asset-manager/")
